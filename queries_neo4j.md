@@ -117,27 +117,47 @@ LIMIT 10;
 
 ---
 
-## Query 7e — Clusters de artistas por género (sin GDS)
+## Query 7e — Clusters de artistas altamente interconectados (sin GDS)
 
-> Encontrar comunidades musicales altamente interconectadas e identificar el género dominante de cada cluster.
+> Encontrar comunidades musicales basadas en la densidad real de colaboraciones mutuas e identificar el género dominante de cada cluster.
 
-> **Nota:** AuraDB Free no incluye Graph Data Science (GDS). Esta query aproxima los clusters agrupando por género y densidad de colaboraciones con Cypher puro.
+> **Nota:** AuraDB Free no incluye Graph Data Science (GDS). La detección de comunidades se implementa con Cypher puro usando vecindarios densos: artistas que comparten ≥2 colaboradores en común Y colaboraron directamente entre sí.
+
+> **Criterio de comunidad:** a diferencia de agrupar por género (que solo categoriza), este enfoque detecta subgrafos estructuralmente densos en la red de colaboraciones — artistas que forman un núcleo interconectado independientemente de su género.
 
 ```cypher
-MATCH (a:Artist)-[:COLLABORATED_WITH]-(b:Artist)
-WITH a, collect(DISTINCT b.stage_name) AS colaboradores, count(*) AS grado
-WHERE grado >= 1
+MATCH (a:Artist)-[:COLLABORATED_WITH]-(x:Artist)-[:COLLABORATED_WITH]-(b:Artist)
+WHERE a <> b
+  AND (a)-[:COLLABORATED_WITH]-(b)
+WITH a, b, count(x) AS colaboradores_comunes
+WHERE colaboradores_comunes >= 2
 WITH
-  a.main_genre          AS cluster_genero,
-  collect(a.stage_name) AS artistas,
-  count(*)              AS tamanio_cluster,
-  avg(grado)            AS conexiones_promedio
+  collect(DISTINCT a.stage_name) AS comunidad,
+  collect(DISTINCT a.main_genre) AS generos_en_cluster
 RETURN
-  cluster_genero,
-  artistas[0..5]        AS muestra_artistas,
-  tamanio_cluster,
-  round(conexiones_promedio, 2) AS conexiones_promedio
-ORDER BY tamanio_cluster DESC;
+  comunidad[0..6]          AS muestra_artistas,
+  generos_en_cluster[0..3] AS generos_presentes,
+  generos_en_cluster[0]    AS genero_dominante,
+  size(comunidad)          AS tamanio_cluster
+ORDER BY tamanio_cluster DESC
+LIMIT 10;
+```
+
+**Variante — triángulos de colaboración** (núcleo más denso: 3 artistas que colaboraron mutuamente):
+
+```cypher
+MATCH (a:Artist)-[:COLLABORATED_WITH]-(b:Artist)-[:COLLABORATED_WITH]-(c:Artist)
+WHERE (a)-[:COLLABORATED_WITH]-(c)
+  AND id(a) < id(b) AND id(b) < id(c)
+RETURN
+  a.stage_name AS artista_1,
+  b.stage_name AS artista_2,
+  c.stage_name AS artista_3,
+  a.main_genre AS genero_1,
+  b.main_genre AS genero_2,
+  c.main_genre AS genero_3
+ORDER BY artista_1
+LIMIT 20;
 ```
 
 ---

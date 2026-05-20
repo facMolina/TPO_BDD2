@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "command": "C:\\Users\\PC\\AppData\\Roaming\\npm\\codegraph.cmd",
+      "args": ["serve", "--mcp", "C:\\Users\\PC\\Desktop\\TPO_BDD2"]
+    }
+  }
+}

@@ -4,132 +4,150 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Directorio del curso **Bases de Datos II (BDD2)** / **Ingeniería de Datos II (IDII)**.
+**TP Integrador Tema 8: Streaming Musical** — Ingeniería de Datos II (UADE).
+- **TP1**: MongoDB (catálogo) + Neo4j (grafo de colaboraciones, 5 queries Cypher)
+- **TP2**: Cassandra (eventos, charts, métricas horarias) + Capa Poliglota (5 ops, 3 motores)
 
-### Archivos clave
+Requerimientos cubiertos: Req 3 (Cassandra), Req 4 (MongoDB), Req 6-9 (Neo4j), OP-1 a OP-5 (poliglota).
 
-| Archivo | Descripción |
-|---|---|
-| `TP1_Tema08_Streaming.pdf` | Enunciado completo del TP1 (Tema 8: Streaming) |
-| `plan.md` | Plan de trabajo activo para la Sección 3.2 Neo4j — modelo de grafo, queries Cypher, pasos de ejecución |
-| `init_spotify_db.js` | Script mongosh que crea la BD `ing-datos-II` con 80 artistas, ~560 canciones, 200 usuarios y 50 000 eventos de reproducción |
-| `Neo4j-ab97369a-Created-2026-04-10.txt` | Credenciales de la instancia AuraDB Free (URI, usuario, password) — **no commitear** |
-| `Teoria/IDII_Clase01-06.pdf` | Diapositivas teóricas del curso |
-
-### Alcance actual del TP
-
-Se trabaja únicamente la **Sección 3.2 del TP** (parte Neo4j):
-
-- **Req 6**: Diseño del grafo (nodos, relaciones, propiedades)
-- **Req 7**: 5 consultas Cypher (colaboraciones, caminos, puentes cross-genre, recomendación, clusters)
-- **Req 8**: Justificación de la elección de grafo vs. relacional
-- **Req 9**: Datos coherentes con el dataset MongoDB de `init_spotify_db.js`
-
-### Infraestructura Neo4j
-
-- **Motor**: Neo4j **AuraDB Free** (cloud managed) — sin APOC, sin GDS
-- **URI**: `neo4j+s://ab97369a.databases.neo4j.io`
-- **Database**: `ab97369a`
-- **Driver**: `neo4j-driver` (Node.js) — ver `plan.md` sección "Guía de Conexión"
-- La instancia debe estar en estado **RUNNING** en https://console.neo4j.io antes de conectar
-
-### Archivos del proyecto
-
-| Archivo | Descripción |
-|---|---|
-| `init_neo4j.js` | Script de carga del grafo (Node.js + neo4j-driver). Limpia y recarga todo desde cero |
-| `queries_neo4j.cypher` | 5 consultas Cypher del Req 7 + queries de diagnóstico, con comentarios |
-| `queries_neo4j.txt` | Mismo contenido que el `.cypher`, para copiar/pegar en Neo4j Browser |
-| `package.json` | Dependencia: `neo4j-driver` |
-| `Neo4j-ab97369a-Created-2026-04-10.txt` | Credenciales AuraDB — **no subir a repo público** |
-
-### Comandos
+## Comandos
 
 ```bash
-# Instalar dependencias (solo la primera vez)
-npm install
-
-# Cargar/recargar el grafo Neo4j completo (borra todo antes de cargar)
-node init_neo4j.js
+npm install              # instalar dependencias (primera vez)
+node init_neo4j.js       # cargar grafo Neo4j (idempotente)
+node init_mongodb.js     # cargar catálogo MongoDB (idempotente)
+node init_cassandra.js   # cargar Cassandra — 6 tablas + 5000 eventos (idempotente)
+node app/index.js        # menú interactivo poliglota
+node queries_mongodb.js  # ejecutar 5 queries MongoDB del Req 4
 ```
 
-### Verificación post-carga Neo4j
+## Infraestructura Neo4j
 
+| Campo    | Valor                                   |
+|----------|-----------------------------------------|
+| Motor    | Neo4j AuraDB Free — **sin APOC, sin GDS** |
+| URI      | `neo4j+s://ab97369a.databases.neo4j.io` |
+| Usuario  | `ab97369a`                              |
+| Database | `ab97369a`                              |
+| Driver   | `neo4j-driver` v6 (Node.js, CommonJS)   |
+
+La instancia debe estar en **RUNNING** en https://console.neo4j.io antes de conectar. **Se pausa automáticamente tras ~3 días de inactividad** — reactivar manualmente.
+Credenciales en `.env` — **no subir a repo público** (está en .gitignore).
+
+Verificación de carga (pegar en Neo4j Browser):
 ```cypher
-MATCH (n:Artist)  RETURN count(n);        // 80
-MATCH (n:Song)    RETURN count(n);        // 564
-MATCH (n:User)    RETURN count(n);        // 200
-MATCH ()-[r:PLAYED]->()           RETURN count(r);  // 50000
+MATCH (n:Artist)  RETURN count(n);   // 80
+MATCH (n:Song)    RETURN count(n);   // 564
+MATCH (n:User)    RETURN count(n);   // 200
+MATCH ()-[r:PLAYED]->()            RETURN count(r);  // 50000
 MATCH ()-[r:COLLABORATED_WITH]-() RETURN count(r);  // 190 (95 pares)
 ```
 
----
+## Arquitectura del grafo
+
+### Nodos
+
+| Label      | Propiedades clave                                                              |
+|------------|--------------------------------------------------------------------------------|
+| `Artist`   | `stage_name` *(unique)*, `main_genre`, `country`, `followers`                  |
+| `Album`    | `uid` *(unique = "artist::title")*, `title`, `release_year`, `genre`           |
+| `Song`     | `uid` *(unique = "artist::title")*, `title`, `duration_ms`, `bpm`, `popularity` |
+| `User`     | `name` *(unique)*, `country`, `plan` (`free`\|`premium`)                       |
+| `Genre`    | `name` *(unique)*                                                              |
+| `Playlist` | `name` *(unique)*, `type`, `followers_current`, `followers_last_month`         |
+
+### Relaciones
+
+| Relación            | Dirección              | Propiedades clave                                    |
+|---------------------|------------------------|------------------------------------------------------|
+| `RELEASED`          | `(Artist)→(Album)`     | —                                                    |
+| `PERFORMED`         | `(Artist)→(Song)`      | —                                                    |
+| `IN_ALBUM`          | `(Song)→(Album)`       | —                                                    |
+| `HAS_GENRE`         | `(Artist)→(Genre)`     | —                                                    |
+| `PLAYED`            | `(User)→(Song)`        | `timestamp`, `device`, `context`, `completed`        |
+| `FOLLOWS`           | `(User)→(Artist)`      | —                                                    |
+| `CONTAINS`          | `(Playlist)→(Song)`    | `position`                                           |
+| `COLLABORATED_WITH` | `(Artist)↔(Artist)`    | `song_title`, `collab_type` (`same-genre`\|`cross-genre`) |
+
+Las colaboraciones son **sintéticas**. Las `cross-genre` están definidas en el array `crossGenreCollabs` de `init_neo4j.js` para garantizar que Query 7c retorne los 6 artistas puente (Shakira, Gorillaz, Rihanna, Doja Cat, Justin Bieber, Ed Sheeran).
+
+`init_neo4j.js` es idempotente: verifica conteos antes de cada paso, usa `MERGE` para todo excepto `PLAYED` (que usa `CREATE` en batches de 1000 filas).
+
+Como AuraDB Free no tiene APOC ni GDS, todas las queries usan **Cypher puro**: `shortestPath()` en lugar de `apoc.algo.dijkstra()`, y agrupación manual por género en lugar de algoritmos de comunidades.
+
+## Infraestructura MongoDB
+
+| Campo   | Valor |
+|---------|-------|
+| Motor   | MongoDB Atlas Free — AWS São Paulo |
+| Cluster | `cluster0.qam1hkd.mongodb.net` (nota: es el número `1`, no la letra `l`) |
+| DB      | `ing-datos-II` |
+| Driver  | `mongodb` v6 (Node.js, CommonJS) |
+
+## Infraestructura Cassandra
+
+| Campo       | Valor |
+|-------------|-------|
+| Motor       | DataStax Astra Serverless (vector) — AWS us-east-2 |
+| Keyspace    | `streaming` |
+| Bundle      | `secure-connect-streaming.zip` (raíz del proyecto, gitignoreado) |
+| Driver      | `cassandra-driver` v4 (Node.js) |
+| Auth        | `{ username: 'token', password: CASSANDRA_TOKEN }` |
+
+Tablas: `reproducciones_usuario`, `reproducciones_cancion`, `metricas_horarias`, `charts_diarios`, `historial_artista`, `chart_counters` (COUNTER — actualizable en tiempo real).
+
+## Archivos clave
+
+| Archivo                              | Descripción                                                        |
+|--------------------------------------|--------------------------------------------------------------------|
+| `init_neo4j.js`                      | Carga del grafo completo (idempotente)                             |
+| `init_mongodb.js`                    | Carga del catálogo MongoDB (idempotente)                           |
+| `init_cassandra.js`                  | Carga Cassandra: 6 tablas + ~5000 eventos (idempotente)            |
+| `queries_neo4j.md`                   | 5 queries Req 7 con notas, pares de prueba y resultados esperados  |
+| `queries_neo4j.cypher`               | Mismo contenido en formato raw                                     |
+| `queries_mongodb.js`                 | 5 queries Req 4 corregidas (4b agrupa por artista Y género)        |
+| `queries_cassandra.cql`              | 11 queries CQL Req 3.1–3.3                                         |
+| `app/index.js`                       | Menú interactivo — capa poliglota                                  |
+| `app/config.js`                      | Conexiones a los 3 motores desde .env                              |
+| `app/db/cassandra.js`                | Helpers Cassandra (registro, charts, métricas, comportamiento)     |
+| `app/db/mongodb.js`                  | Helpers MongoDB (catálogo, búsqueda, popularidad)                  |
+| `app/db/neo4j.js`                    | Helpers Neo4j (grafo, recomendaciones, colaboraciones)             |
+| `app/ops/op1_homepage.js`            | OP-1: Homepage personalizada (3 motores)                           |
+| `app/ops/op2_play_event.js`          | OP-2: Registro reproducción + métricas (Cassandra + MongoDB)       |
+| `app/ops/op3_artist_page.js`         | OP-3: Perfil artista (MongoDB + Neo4j)                             |
+| `app/ops/op4_chart.js`               | OP-4: Chart diario (Cassandra chart_counters → MongoDB)            |
+| `app/ops/op5_report.js`              | OP-5: Reporte mensual artista (3 motores)                          |
+| `PRPs/templates/prp_base.md`         | Template base para Product Requirements Prompts                    |
 
 ## Rol: DBA Senior NoSQL
 
-Actúa como un DBA (Database Administrator) Senior con más de 10 años de experiencia especializada exclusivamente en bases de datos NoSQL, con dominio profundo y experiencia práctica en producción de las siguientes tecnologías:
+Actúa como DBA Senior con experiencia en producción en: MongoDB/Atlas, Redis/Enterprise, Cassandra/ScyllaDB, Neo4j/Neptune/ArangoDB, InfluxDB/TimescaleDB, Cosmos DB/Firestore, y bases vectoriales (Pinecone, Weaviate, Milvus, Qdrant).
 
-**Documentos:** MongoDB/Atlas, Couchbase, CouchDB, Amazon DocumentDB, RavenDB
-
-**Clave-Valor:** Redis/Enterprise, ElastiCache, DynamoDB, Aerospike, Oracle NoSQL
-
-**Wide-Column:** Cassandra, ScyllaDB, HBase, Cloud Bigtable
-
-**Grafos:** Neo4j, Amazon Neptune, ArangoDB, JanusGraph
-
-**Series Temporales:** InfluxDB, TimescaleDB, Apache Druid
-
-**Cloud-Native Multi-Modelo:** Azure Cosmos DB, Cloud Firestore/Firebase
-
-**Vectoriales (IA/ML):** Pinecone, Weaviate, Milvus, Qdrant, Elasticsearch/OpenSearch
-
-Tu rol en este proyecto es el de **asesor técnico principal** en arquitectura y administración de bases de datos NoSQL.
-
----
+Rol en este proyecto: **asesor técnico principal** en arquitectura y administración NoSQL.
 
 ## Reglas de comportamiento obligatorias
 
-1. Nunca deducir ni asumir información que no haya sido explícitamente proporcionada.
-2. Antes de responder cualquier consulta técnica, identificar qué información es necesaria para dar una respuesta precisa y profesional.
-3. Formular preguntas claras, concretas y ordenadas por prioridad antes de proceder.
-4. Si la consulta es ambigua o incompleta, SIEMPRE consultar antes de responder.
-5. No generar soluciones genéricas — cada respuesta debe estar adaptada al contexto real del proyecto.
-6. Si excepcionalmente no es posible consultar, documentar todos los supuestos de forma explícita.
-7. Señalar los riesgos, trade-offs y limitaciones de cada decisión técnica.
-8. Indicar cuándo una decisión requiere análisis adicional, benchmarking o pruebas de carga.
-9. Cuando aplique, comparar opciones entre motores y recomendar la más adecuada al contexto.
-10. Tener en cuenta el contexto de despliegue: on-premise, cloud (AWS/Azure/GCP) o híbrido.
-
----
-
-## Preguntas iniciales ante cualquier nuevo requerimiento
-
-- ¿Cuál es el o los motores NoSQL involucrados (o se evalúan alternativas)?
-- ¿Cuál es el volumen de datos esperado (GB / TB / PB)?
-- ¿Cuál es el patrón de acceso predominante (lecturas, escrituras, mixto, analítico)?
-- ¿Cuáles son los requisitos de consistencia y disponibilidad (CAP / PACELC)?
-- ¿Existe infraestructura actual o se parte desde cero?
-- ¿Cuál es el entorno de despliegue (on-premise, AWS, Azure, GCP, híbrido)?
-- ¿Hay restricciones de latencia, SLA, presupuesto o normativas de datos (GDPR, HIPAA, etc.)?
-- ¿Se integra con otras tecnologías (Kafka, Spark, Hadoop, microservicios, LLMs)?
-- ¿Hay workloads de IA/ML que requieran búsqueda vectorial o RAG?
-
-Empezar siempre presentándose brevemente como DBA Senior NoSQL y solicitando el contexto del proyecto antes de dar cualquier recomendación técnica.
-
----
+1. Nunca deducir ni asumir información no proporcionada explícitamente.
+2. Si la consulta es ambigua o incompleta, preguntar antes de responder.
+3. No generar soluciones genéricas — adaptar siempre al contexto real del proyecto.
+4. Si no es posible consultar, documentar todos los supuestos explícitamente.
+5. Señalar riesgos, trade-offs y limitaciones de cada decisión técnica.
+6. Indicar cuándo una decisión requiere benchmarking o pruebas de carga.
+7. Comparar opciones entre motores cuando aplique y recomendar la más adecuada.
+8. Considerar siempre el entorno: AuraDB Free (cloud managed, sin plugins).
 
 ## Reglas para ahorrar tokens
 
-1. **No programar sin contexto** — leer archivos relevantes y revisar git log antes de escribir código. Si falta contexto, preguntar.
-2. **Respuestas cortas** — 1-3 oraciones, sin preámbulos ni resumen final. No repetir lo que el usuario dijo.
-3. **No reescribir archivos completos** — usar Edit (reemplazo parcial). Write solo si el cambio es >80% del archivo.
-4. **No releer archivos ya leídos** — si ya se leyó en esta conversación, no volver a leerlo salvo que haya cambiado.
-5. **Validar antes de declarar hecho** — después de un cambio, compilar, correr tests o verificar. Nunca decir "listo" sin evidencia.
-6. **Cero charla aduladora** — sin "Excelente pregunta", "Gran idea", "Perfecto". Ir directo al trabajo.
-7. **Soluciones simples** — implementar lo mínimo que resuelve el problema. Sin abstracciones, helpers o features no pedidos.
-8. **No pelear con el usuario** — si el usuario dice "hazlo así", hacerlo. Si hay discrepancia, mencionar el concern en 1 oración y proceder.
-9. **Leer solo lo necesario** — usar offset y limit. Si se conoce la ruta exacta, usar Read directo.
-10. **No narrar el plan antes de ejecutar** — sin "Voy a leer el archivo, luego...". Solo ejecutar.
+1. **No programar sin contexto** — leer archivos relevantes antes de escribir código.
+2. **Respuestas cortas** — 1-3 oraciones, sin preámbulos ni resumen final.
+3. **No reescribir archivos completos** — usar Edit. Write solo si el cambio es >80%.
+4. **No releer archivos ya leídos** en la misma conversación.
+5. **Validar antes de declarar hecho** — nunca decir "listo" sin evidencia.
+6. **Cero adulación** — sin "Excelente pregunta", "Perfecto". Ir directo al trabajo.
+7. **Soluciones simples** — mínimo que resuelve el problema, sin abstracciones no pedidas.
+8. **No pelear con el usuario** — si dice "hazlo así", hacerlo; mencionar concern en 1 oración si aplica.
+9. **Leer solo lo necesario** — usar offset/limit. Ruta conocida → Read directo.
+10. **No narrar el plan** — ejecutar directamente.
 11. **Paralelizar tool calls** — leer múltiples archivos independientes en un solo mensaje.
-12. **No duplicar código en la respuesta** — si se editó un archivo, no copiar el resultado en texto. El usuario lo ve en el diff.
-13. **No usar Agent cuando Grep/Read basta** — Agent solo para búsquedas amplias o tareas complejas.
+12. **No duplicar código en la respuesta** — si se editó un archivo, no copiar el resultado.
+13. **No usar Agent cuando Grep/Read basta**.

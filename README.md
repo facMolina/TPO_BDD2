@@ -1,138 +1,193 @@
-# TP1 Tema 8 — Plataforma de Streaming Musical (Neo4j)
+# Plataforma de Streaming Musical — TP Integrador
 
-**Ingeniería de Datos II — UADE**
-Trabajo Práctico Integrador · 1.ª Entrega · Tema 8
-
-Este repositorio contiene la implementación de la **Sección 3.2 — Requerimientos de grafos (Neo4j)** del TP. La parte MongoDB la maneja otro equipo; los datos son coherentes entre ambos motores (Req 9).
+**Ingeniería de Datos II · UADE · Tema 8**  
+1.ª Entrega: MongoDB + Neo4j · 2.ª Entrega: + Cassandra + Capa Poliglota
 
 ---
 
-## Pre-requisitos
+## Stack tecnológico
 
-- [Node.js](https://nodejs.org/) v18 o superior
-- Acceso a internet (la instancia corre en Neo4j AuraDB Free — cloud)
-
----
-
-## Instancia AuraDB del grupo
-
-| Campo | Valor |
-|---|---|
-| URI | `neo4j+s://ab97369a.databases.neo4j.io` |
-| Usuario | `ab97369a` |
-| Password | `KCQfc0T1LcR-cgPPu3ZTRnIpBqn8QBLvTcc30sSJRU8` |
-| Database | `ab97369a` |
-
-> La instancia debe estar en estado **RUNNING** antes de ejecutar el script.
-> Verificar en [console.neo4j.io](https://console.neo4j.io).
+| Motor | Instancia | Rol |
+|---|---|---|
+| **MongoDB** | Atlas Free (AWS São Paulo) | Fuente de verdad — catálogo maestro (artistas, álbumes, canciones, playlists) |
+| **Neo4j** | AuraDB Free | Red de grafos — colaboraciones entre artistas, recomendaciones por proximidad |
+| **Cassandra** | DataStax Astra Free (AWS us-east-2) | Series temporales — eventos de reproducción, métricas horarias, charts diarios |
 
 ---
 
-## Instalación
+## Requisitos previos
+
+- **Node.js** v18 o superior
+- Archivo `.env` con las credenciales (ver `.env.example`)
+- `secure-connect-streaming.zip` en la raíz del proyecto (Cassandra bundle)
+
+---
+
+## Setup inicial (primera vez)
 
 ```bash
+# 1. Instalar dependencias
 npm install
+
+# 2. Copiar template de credenciales y completar
+cp .env.example .env
+# Editar .env con: NEO4J_PASSWORD, MONGO_URI, CASSANDRA_TOKEN, CASSANDRA_BUNDLE_PATH
+
+# 3. Cargar datos en Neo4j (grafo completo — idempotente)
+node init_neo4j.js
+
+# 4. Cargar datos en MongoDB (catálogo musical — idempotente)
+node init_mongodb.js
+
+# 5. Cargar datos en Cassandra (eventos + métricas + charts — idempotente)
+node init_cassandra.js
 ```
 
-Instala `neo4j-driver` (única dependencia).
+> **Neo4j AuraDB Free** se pausa automáticamente tras 3 días de inactividad.  
+> Reactivar en [console.neo4j.io](https://console.neo4j.io) antes de ejecutar la app.
 
 ---
 
-## Carga del grafo
+## Capa poliglota — menú interactivo
 
 ```bash
-node init_neo4j.js
+node app/index.js
 ```
 
-El script es **idempotente**: antes de cargar cada sección verifica si los datos ya existen. Si el grafo ya está cargado, omite esa sección sin duplicar nada. Útil si la conexión se cae a mitad de camino o si se ejecuta dos veces por error.
+Presenta un menú numerado. Cada operación integra múltiples motores:
 
-### Qué carga
+| Op | Motores | Descripción |
+|---|---|---|
+| **OP-1** | Cassandra → Neo4j → MongoDB | Página de inicio personalizada |
+| **OP-2** | Cassandra + MongoDB | Registro de reproducción y actualización de métricas |
+| **OP-3** | MongoDB + Neo4j | Perfil de artista con red de colaboraciones |
+| **OP-4** | Cassandra → MongoDB | Chart diario por país (top 50) |
+| **OP-5** | Cassandra + MongoDB + Neo4j | Reporte mensual de artista |
 
-| Entidad / Relación | Cantidad |
+---
+
+## Dataset cargado
+
+| Entidad / Tabla | Cantidad |
 |---|---|
-| `Artist` | 80 |
-| `Album` | 80 |
-| `Song` | 564 |
-| `User` | 200 |
-| `Genre` | 18 |
-| `Playlist` | 5 |
-| `PLAYED` | 50 000 |
-| `COLLABORATED_WITH` | 95 pares |
-| `FOLLOWS` | ~580 |
+| Artistas (MongoDB + Neo4j) | 80 |
+| Álbumes (MongoDB + Neo4j) | 80 |
+| Canciones (MongoDB + Neo4j) | 564 |
+| Usuarios (MongoDB + Neo4j) | 200 |
+| Géneros (Neo4j) | 18 |
+| Playlists (MongoDB + Neo4j) | 5 |
+| Reproducciones — `PLAYED` (Neo4j) | 50 000 |
+| Colaboraciones — `COLLABORATED_WITH` (Neo4j) | 95 pares (190 relaciones) |
+| Eventos Cassandra (`reproducciones_usuario`) | 5 000 |
+| Charts diarios (`charts_diarios` + `chart_counters`) | ~4 870 filas |
+| Métricas horarias (`metricas_horarias`) | ~4 974 filas |
 
-### Salida esperada (primera ejecución)
+---
 
-```
-✅ Conectado a AuraDB
-📊 Estado actual del grafo: ...
-🎸 PASO 2: Creando nodos Genre...         ✅ 18 géneros creados.
-🎵 PASO 3: Creando Artist, Album, Song... ✅ 80 artistas, 80 álbumes, 564 canciones.
-...
-🚀 Carga completa.
+## Consultas de referencia
+
+### Cassandra — `queries_cassandra.cql`
+
+| Req | Consulta |
+|---|---|
+| 3.1a | Historial reproducciones usuario — última semana |
+| 3.1b | Total reproducciones canción — últimas 24h |
+| 3.1c | Tasa de skip (no completadas / total) — último mes |
+| 3.1d | Reproducciones de artista — mes actual |
+| 3.2a | UPDATE métricas horarias (COUNTER) |
+| 3.2b | Top 50 chart de un país en una fecha |
+| 3.2c | Curva horaria de reproducciones de una canción |
+| 3.2d | Detección de crecimiento explosivo (>300% vs. semana anterior) |
+| 3.3a | Género dominante de un usuario — último mes |
+| 3.3b | Horario de mayor actividad de un usuario |
+| 3.3c | Tiempo total de escucha — última semana |
+
+### MongoDB — `queries_mongodb.js`
+
+```bash
+node queries_mongodb.js
 ```
 
-### Salida esperada (segunda ejecución — idempotencia)
+| Req | Consulta |
+|---|---|
+| 4a | Top 10 canciones más reproducidas en las últimas 24h |
+| 4b | Historial semanal agrupado por **artista y género** simultáneamente |
+| 4c | Canciones con alta reproducción y baja tasa de completitud |
+| 4d | Playlists con mayor crecimiento de seguidores |
+| 4e | Recomendación de álbumes para usuario premium |
 
-```
-✅ Conectado a AuraDB
-📊 Estado actual del grafo: ...
-⏭  PASO 2: Genre ya cargado (18) — omitiendo.
-⏭  PASO 3: Artists ya cargados (80) — omitiendo.
-...
-🚀 Sin cambios — grafo ya estaba completo.
-```
+### Neo4j — `queries_neo4j.md` / `queries_neo4j.cypher`
+
+Pegar en [Neo4j Browser](https://browser.neo4j.io) conectado a la instancia del grupo:
+
+| Req | Consulta |
+|---|---|
+| 7a | Artistas con más colaboraciones directas |
+| 7b | Camino más corto entre dos artistas |
+| 7c | Artistas puente (cross-genre) |
+| 7d | Recomendación de artistas por vecindad en el grafo |
+| 7e | Clusters de artistas altamente interconectados (vecindarios densos) |
 
 ---
 
 ## Verificación de carga
 
-Pegar en [Neo4j Browser](https://browser.neo4j.io) o en la consola de AuraDB:
+### Neo4j (Neo4j Browser)
 
 ```cypher
-MATCH (n:Artist)  RETURN count(n);   // 80
-MATCH (n:Song)    RETURN count(n);   // 564
-MATCH (n:User)    RETURN count(n);   // 200
-MATCH ()-[r:PLAYED]->()            RETURN count(r);  // 50000
-MATCH ()-[r:COLLABORATED_WITH]-()  RETURN count(r);  // 190
+MATCH (n:Artist)  RETURN count(n);            // 80
+MATCH (n:Song)    RETURN count(n);            // 564
+MATCH (n:User)    RETURN count(n);            // 200
+MATCH ()-[r:PLAYED]->()       RETURN count(r); // 50000
+MATCH ()-[r:COLLABORATED_WITH]-() RETURN count(r); // 190
+```
+
+### MongoDB (Atlas o consola)
+
+```javascript
+db.artists.countDocuments()   // 80
+db.songs.countDocuments()     // 564
+db.plays.countDocuments()     // 50000
+```
+
+### Cassandra (Astra CQL Console)
+
+```cql
+SELECT COUNT(*) FROM streaming.reproducciones_usuario; -- 5000
+SELECT COUNT(*) FROM streaming.chart_counters;         -- ~4870
+SELECT COUNT(*) FROM streaming.metricas_horarias;      -- ~4974
 ```
 
 ---
 
-## Ejecutar las consultas del TP
+## Modelo de datos
 
-Las 5 consultas del **Req 7** están en [`queries_neo4j.md`](./queries_neo4j.md).
+### Neo4j — nodos y relaciones
 
-1. Abrir el archivo
-2. Copiar la query deseada
-3. Pegarla en [Neo4j Browser](https://browser.neo4j.io) conectado a la instancia del grupo
-
----
-
-## Modelo del grafo
-
-### Nodos
-
-| Label | Propiedades clave |
+| Label / Relación | Propiedades clave |
 |---|---|
 | `Artist` | `stage_name` *(unique)*, `main_genre`, `country`, `followers` |
-| `Album` | `uid` *(unique)*, `title`, `release_year`, `genre` |
+| `Album` | `uid` *(unique)*, `title`, `release_year` |
 | `Song` | `uid` *(unique)*, `title`, `duration_ms`, `bpm`, `popularity` |
 | `User` | `name` *(unique)*, `country`, `plan` |
 | `Genre` | `name` *(unique)* |
-| `Playlist` | `name` *(unique)*, `type`, `followers_current`, `description` |
+| `(Artist)→[RELEASED]→(Album)` | — |
+| `(Artist)→[PERFORMED]→(Song)` | — |
+| `(User)→[PLAYED]→(Song)` | `timestamp`, `device`, `context`, `completed` |
+| `(Artist)↔[COLLABORATED_WITH]↔(Artist)` | `song_title`, `collab_type` |
 
-### Relaciones
+### Cassandra — tablas
 
-| Relación | Dirección | Semántica |
-|---|---|---|
-| `RELEASED` | `(Artist)→(Album)` | Artista publicó el álbum |
-| `PERFORMED` | `(Artist)→(Song)` | Artista interpretó la canción |
-| `IN_ALBUM` | `(Song)→(Album)` | Canción pertenece al álbum |
-| `HAS_GENRE` | `(Artist)→(Genre)` | Género principal del artista |
-| `PLAYED` | `(User)→(Song)` | Reproducción (timestamp, device, context, completed) |
-| `FOLLOWS` | `(User)→(Artist)` | Usuario sigue al artista |
-| `CONTAINS` | `(Playlist)→(Song)` | Playlist incluye canción (position) |
-| `COLLABORATED_WITH` | `(Artist)↔(Artist)` | Colaboración musical (song_title, collab_type) |
+| Tabla | Partition Key | Clustering | Uso |
+|---|---|---|---|
+| `reproducciones_usuario` | `usuario_id` | `timestamp DESC` | Historial por usuario |
+| `reproducciones_cancion` | `cancion_id` | `timestamp DESC` | Popularidad por canción |
+| `metricas_horarias` | `(cancion_id, fecha)` | `hora ASC` | Curva horaria (COUNTER) |
+| `charts_diarios` | `(pais, fecha)` | `reproducciones DESC` | Snapshot histórico pre-calculado |
+| `chart_counters` | `(pais, fecha)` | `cancion_id` | Ranking live actualizable (COUNTER) |
+| `historial_artista` | `(artista_id, anio_mes)` | `timestamp DESC` | Métricas mensuales de artista |
+
+> **`chart_counters` vs `charts_diarios`**: `chart_counters` es una tabla COUNTER que se incrementa en cada evento (OP-2). Permite leer el ranking live en cualquier momento. `charts_diarios` es un snapshot pre-calculado con `reproducciones` como clustering key (ordenamiento nativo DESC), útil para consultas históricas sobre datos de días anteriores.
 
 ---
 
@@ -140,27 +195,57 @@ Las 5 consultas del **Req 7** están en [`queries_neo4j.md`](./queries_neo4j.md)
 
 ```
 TPO_BDD2/
-├── init_neo4j.js          # Script de carga del grafo (Node.js)
-├── queries_neo4j.md        # 5 consultas Cypher del Req 7 + diagnóstico
-├── queries_neo4j.cypher    # Mismo contenido, formato .cypher
-├── init_spotify_db.js      # Script de carga MongoDB (referencia del otro equipo)
-├── plan.md                 # Diseño técnico, decisiones y estado del proyecto
-├── TP1_Tema08_Streaming.pdf # Enunciado del TP
-├── package.json
-└── CLAUDE.md               # Contexto para Claude Code
+├── init_neo4j.js           # Carga del grafo Neo4j (idempotente)
+├── init_mongodb.js         # Carga del catálogo MongoDB (idempotente)
+├── init_cassandra.js       # Carga de Cassandra: 6 tablas + ~5000 eventos (idempotente)
+├── queries_neo4j.md        # 5 queries Cypher (Req 7) con notas y resultados esperados
+├── queries_neo4j.cypher    # Mismo contenido, formato raw
+├── queries_mongodb.js      # 5 queries MongoDB (Req 4) corregidas
+├── queries_cassandra.cql   # 11 queries CQL (Req 3.1–3.3)
+├── app/
+│   ├── index.js            # Menú interactivo — capa poliglota
+│   ├── config.js           # Conexiones a los 3 motores (desde .env)
+│   ├── db/
+│   │   ├── cassandra.js    # Helpers Cassandra (registro, charts, métricas, comportamiento)
+│   │   ├── mongodb.js      # Helpers MongoDB (catálogo, búsqueda, popularidad)
+│   │   └── neo4j.js        # Helpers Neo4j (grafo, recomendaciones, colaboraciones)
+│   └── ops/
+│       ├── op1_homepage.js
+│       ├── op2_play_event.js
+│       ├── op3_artist_page.js
+│       ├── op4_chart.js
+│       └── op5_report.js
+├── .env.example            # Template de credenciales (sin valores reales)
+├── secure-connect-streaming.zip  # Bundle Cassandra — NO commitear (ver .gitignore)
+└── package.json
 ```
 
 ---
 
-## Requerimientos cubiertos
+## Variables de entorno
 
-| Req | Descripción | Estado |
-|---|---|---|
-| 6 | Diseño del grafo (nodos, etiquetas, relaciones, propiedades) | ✅ |
-| 7a | Artistas a ≤2 saltos de colaboración | ✅ |
-| 7b | Camino entre artistas sin collab directa | ✅ |
-| 7c | Artistas puente entre ≥3 géneros | ✅ |
-| 7d | Recomendación por usuarios similares | ✅ |
-| 7e | Clusters de artistas por género dominante | ✅ |
-| 8 | Justificación grafo vs. relacional | ⏳ En el informe |
-| 9 | Datos coherentes con MongoDB | ✅ |
+```env
+# Neo4j AuraDB
+NEO4J_URI=neo4j+s://<instance>.databases.neo4j.io
+NEO4J_USER=<user>
+NEO4J_PASSWORD=<password>
+NEO4J_DATABASE=<database>
+
+# MongoDB Atlas
+MONGO_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/ing-datos-II?retryWrites=true&w=majority
+MONGO_DB=ing-datos-II
+
+# DataStax Astra (Cassandra)
+CASSANDRA_BUNDLE_PATH=./secure-connect-streaming.zip
+CASSANDRA_TOKEN=AstraCS:<token>
+CASSANDRA_KEYSPACE=streaming
+```
+
+---
+
+## Correcciones TP1 incorporadas
+
+| Error | Corrección |
+|---|---|
+| **MongoDB Req 4b** — agrupaba solo por artista | Ahora agrupa por `{ artista, genero }` simultáneamente en el mismo `$group` |
+| **Neo4j Req 7e** — agrupaba por género en lugar de detectar comunidades | Ahora detecta vecindarios densos: artistas con ≥2 colaboradores comunes |

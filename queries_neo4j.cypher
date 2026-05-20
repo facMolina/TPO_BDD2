@@ -130,29 +130,52 @@ LIMIT 10;
 // Encontrar clusters de artistas altamente interconectados (comunidades
 // musicales) e identificar el género dominante de cada cluster.
 // ─────────────────────────────────────────────────────────────────────────────
-// Sin GDS (AuraDB Free no lo tiene): agrupamos por género + densidad de conexiones.
-// Un cluster = conjunto de artistas del mismo género con ≥1 colaboración entre sí.
+// Sin GDS (AuraDB Free no lo tiene): detectamos comunidades por densidad real
+// de colaboraciones mutuas — artistas que comparten ≥2 colaboradores en común
+// Y además colaboraron directamente entre sí (vecindarios densos / triángulos).
+//
+// CORRECCIÓN respecto a la entrega anterior:
+// La versión anterior agrupaba artistas por género (main_genre), lo que no
+// detecta comunidades — solo categorías. Esta versión identifica subgrafos
+// densamente conectados basándose en la estructura real del grafo.
 
-MATCH (a:Artist)-[:COLLABORATED_WITH]-(b:Artist)
-WITH a, collect(DISTINCT b.stage_name) AS colaboradores, count(*) AS grado
-WHERE grado >= 1
+MATCH (a:Artist)-[:COLLABORATED_WITH]-(x:Artist)-[:COLLABORATED_WITH]-(b:Artist)
+WHERE a <> b
+  AND (a)-[:COLLABORATED_WITH]-(b)
+WITH a, b, count(x) AS colaboradores_comunes
+WHERE colaboradores_comunes >= 2
 WITH
-  a.main_genre          AS cluster_genero,
-  collect(a.stage_name) AS artistas,
-  count(*)              AS tamanio_cluster,
-  avg(grado)            AS conexiones_promedio
+  collect(DISTINCT a.stage_name) AS comunidad,
+  collect(DISTINCT a.main_genre) AS generos_en_cluster
 RETURN
-  cluster_genero,
-  artistas[0..5]        AS muestra_artistas,
-  tamanio_cluster,
-  round(conexiones_promedio, 2) AS conexiones_promedio
-ORDER BY tamanio_cluster DESC;
+  comunidad[0..6]          AS muestra_artistas,
+  generos_en_cluster[0..3] AS generos_presentes,
+  generos_en_cluster[0]    AS genero_dominante,
+  size(comunidad)          AS tamanio_cluster
+ORDER BY tamanio_cluster DESC
+LIMIT 10;
 
-// ─── Variante: ver todos los artistas de un cluster específico ────────────────
-// MATCH (a:Artist {main_genre: "Hip Hop"})-[:COLLABORATED_WITH]-(b:Artist)
+// ─── Variante: triángulos de colaboración (3 artistas que se colaboraron mutuamente) ──
+// Útil para identificar el núcleo más denso de cada comunidad.
+MATCH (a:Artist)-[:COLLABORATED_WITH]-(b:Artist)-[:COLLABORATED_WITH]-(c:Artist)
+WHERE (a)-[:COLLABORATED_WITH]-(c)
+  AND id(a) < id(b) AND id(b) < id(c)
+RETURN
+  a.stage_name AS artista_1,
+  b.stage_name AS artista_2,
+  c.stage_name AS artista_3,
+  a.main_genre AS genero_1,
+  b.main_genre AS genero_2,
+  c.main_genre AS genero_3
+ORDER BY artista_1
+LIMIT 20;
+
+// ─── Variante: grado de cada artista (cantidad de colaboraciones directas) ────
+// Combina con lo anterior para identificar los "hubs" de cada comunidad.
+// MATCH (a:Artist)-[:COLLABORATED_WITH]-(b:Artist)
 // WITH a, count(b) AS grado
-// RETURN a.stage_name, grado
-// ORDER BY grado DESC;
+// RETURN a.stage_name, a.main_genre, grado
+// ORDER BY grado DESC LIMIT 15;
 
 
 // =============================================================================
