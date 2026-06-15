@@ -35,15 +35,13 @@ Hay dos profesores. Uno toma la parte práctica, otro la teórica.
 | `07_Comparativa_motores.md` | Por qué cada motor en cada parte del TP | ⭐⭐⭐ |
 | `08_Teoria_general.md` | ACID/BASE · Big Data · principios NoSQL · polyglot · Saga/CQRS | ⭐ |
 | `09_Cheat_sheet_final.md` | Hoja única para repasar el día de la defensa | ⭐⭐⭐ |
+| `10_Plan_semanal.md` | Plan día a día del 16/06 al 22/06 con checkpoints | ⭐⭐⭐ |
 
 ---
 
 ## Cómo usar esta guía
 
-- **Lunes 16/06 a Jueves 19/06**: leer un archivo por día (en orden 01 → 08), revisar Q&A en voz alta como si te estuvieran preguntando.
-- **Viernes 20/06**: repaso completo + practicar queries en cqlsh / mongosh / Neo4j Browser.
-- **Sábado 21/06**: repasar solo el `09_Cheat_sheet_final.md`.
-- **Domingo 22/06**: leer el cheat sheet una vez antes de entrar.
+👉 **Seguí el plan día a día en `10_Plan_semanal.md`** — tiene la distribución completa del 16/06 al 22/06 con checkpoints, prácticas obligatorias y simulacros diarios.
 
 **Regla de oro**: si te preguntan algo que no sabés, no inventes. Decí "no lo abordamos así en el TP, pero podríamos resolverlo de esta forma..." y razoná en voz alta.
 
