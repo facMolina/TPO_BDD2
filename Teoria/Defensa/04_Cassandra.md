@@ -302,6 +302,12 @@ WHERE partition_key = ? AND clustering_key = ?;
 
 ### 3.1 El ejemplo que le dieron a tu compañero (memorizalo)
 
+> 🖥️ **Dónde ejecutarlas**: las queries de esta sección están escritas para **Astra CQL Console**.
+>
+> Abrir desde [astra.datastax.com](https://astra.datastax.com) → database `streaming` → tab **CQL Console** → cuando carga, ejecutá `USE streaming;` primero.
+>
+> Cada sentencia termina en `;` y se ejecuta con `Enter`. La consola guarda historial — flecha arriba para repetir comandos.
+
 📝 **Crear tabla y CRUD básico**:
 
 ```cql

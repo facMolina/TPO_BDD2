@@ -136,26 +136,62 @@
 
 ## PARTE 3 — Queries prácticas
 
-### 🔍 Cómo acceder a la consola web de MongoDB Atlas
+### 🔍 Cómo acceder a la consola de MongoDB para probar las queries
 
-Para practicar queries en la base real del TP **sin instalar nada**:
+⚠️ **OJO**: MongoDB Atlas tiene varias "ventanas con código" y solo **algunas** sirven para probar las queries de este archivo tal como están. Esta es la diferencia:
 
-1. Andá a **[cloud.mongodb.com](https://cloud.mongodb.com)** e iniciá sesión.
-2. Entrá al proyecto del grupo → **Clusters** → tu cluster `Cluster0`.
-3. Tres opciones para escribir queries:
-
-| Opción | Cómo | Cuándo conviene |
+| Lugar en Atlas | ¿Sirve para las queries de este archivo? | Por qué |
 |---|---|---|
-| **Embedded MongoDB Shell** | Botón `...` del cluster → "Open MongoDB Shell" | Para queries CQL-style, lo más rápido |
-| **Browse Collections** | Botón `Browse Collections` → seleccionar `plays` (o cualquier) → tab `Aggregations` o `Find` | Visual, con tab de aggregation pipeline guiada |
-| **Atlas Search Playground** | En `Search` → `Create Index` | Para queries de búsqueda full-text |
+| **Embedded MongoDB Shell** (mongosh) | ✅ **SÍ — usá esta** | Acepta `db.col.aggregate([...])` + JavaScript (`new Date()`, etc.) |
+| **Browse Collections → Aggregation tab** | ✅ Sí, **adaptando**: pegás SOLO el array `[...]`, no `db.col.aggregate(...)` | Editor de pipeline guiado, pero el wrapper lo agrega Atlas solo |
+| **MongoDB Charts** (Add Chart) | ❌ **NO** — esto es para gráficos, no consola | Parser propio, NO acepta JavaScript ni `db.col.aggregate(...)` |
+| **Atlas Search Playground** | ❌ NO — es para índices full-text | Otra cosa |
 
-> 💡 **Alternativa local**: instalar **MongoDB Compass** (cliente de escritorio) y conectar con la `MONGO_URI` del `.env`. Tiene editor visual de pipelines.
+#### Cómo abrir la Embedded MongoDB Shell (lo más rápido)
 
-> 🖥️ **Desde mongosh local**: si tenés `mongosh` instalado:
-> ```bash
-> mongosh "mongodb+srv://facmolina_db_user:<pass>@cluster0.qam1hkd.mongodb.net/ing-datos-II"
-> ```
+1. Entrá a **[cloud.mongodb.com](https://cloud.mongodb.com)**.
+2. **Project** del grupo → **Database** (panel izquierdo) → ahí ves tu cluster `Cluster0`.
+3. Click en el botón **`Connect`** (al lado de `Browse Collections`).
+4. Aparece un modal con opciones de conexión → elegí **`MongoDB Shell`**.
+5. En la sección "Launch the MongoDB Shell" → click en **`Open MongoDB Shell`** (botón celeste).
+6. Se abre una terminal `mongosh` en el navegador, conectada a tu cluster.
+7. Cambiá a la DB del TP:
+   ```javascript
+   use ing-datos-II
+   ```
+8. Ya podés pegar cualquiera de las queries de este archivo tal cual.
+
+#### Si no encontrás el botón "Open MongoDB Shell"
+
+A veces Atlas esconde la opción según el plan. Alternativas:
+
+- **MongoDB Compass** (cliente de escritorio gratis): bajalo de [mongodb.com/products/compass](https://www.mongodb.com/products/compass). Conectás con la `MONGO_URI` del `.env`. Tiene un tab **MONGOSH** integrado en la parte inferior.
+- **mongosh local** (si tenés Node.js instalado):
+  ```bash
+  npm install -g mongosh
+  mongosh "mongodb+srv://facmolina_db_user:<pass>@cluster0.qam1hkd.mongodb.net/ing-datos-II"
+  ```
+
+#### Si usás Browse Collections > Aggregation tab
+
+Si vas por **Browse Collections → seleccionás la colección `plays` → tab `Aggregations`**, Atlas te muestra un editor de pipeline. **No pegues `db.plays.aggregate([...])`**, solo el contenido del array. Ejemplo:
+
+❌ NO funciona ahí:
+```javascript
+db.plays.aggregate([{ $match: {...} }, { $group: {...} }])
+```
+
+✅ Sí funciona:
+```javascript
+[
+  { $match: {...} },
+  { $group: {...} }
+]
+```
+
+O directamente etapa por etapa usando el botón **`Add Stage`** del editor.
+
+> ⚠️ **MongoDB Charts NO sirve para probar queries**. Es solo para crear gráficos a partir de pipelines pre-armados. Si te aparece "Add Chart", "X Axis", "Y Axis" → estás en Charts. Cerrá y volvé a la lista de clusters.
 
 ---
 
@@ -242,6 +278,15 @@ db.plays.aggregate([
 ---
 
 ### 3.1 Queries del dominio del TP
+
+> 🖥️ **Dónde ejecutarlas**: las queries de esta sección están escritas para **mongosh** (Embedded MongoDB Shell o Compass MONGOSH tab).
+>
+> Antes de ejecutar, asegurate de estar en la DB correcta:
+> ```javascript
+> use ing-datos-II
+> ```
+>
+> Si las querés ejecutar en el editor de **Aggregations de Atlas** (Browse Collections → tab Aggregations), pegá **solo el array `[...]`** (sin `db.plays.aggregate(...)` ni el `)` final).
 
 📝 **Top 10 canciones más reproducidas en las últimas 24h** (Req 4a):
 

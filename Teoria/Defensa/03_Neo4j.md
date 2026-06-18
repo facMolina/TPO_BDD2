@@ -237,6 +237,11 @@ Leelo así:
 
 ### 3.1 Queries del TP (Req 7)
 
+> 🖥️ **Dónde ejecutarlas**: las queries de esta sección están escritas para **Neo4j Workspace** (tab Query) o **Neo4j Browser**.
+>
+> Abrir desde [console.neo4j.io](https://console.neo4j.io) → instancia `ab97369a` → botón **Open**.
+> Atajo dentro del editor: `Ctrl+Enter` ejecuta. Cada query se ejecuta de forma independiente — no concatenes varias.
+
 📝 **7a — Artistas con más colaboraciones directas**:
 
 ```cypher
