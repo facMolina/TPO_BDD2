@@ -4,6 +4,23 @@
 
 ---
 
+## 🧭 Mini-recordatorio: Teorema CAP (lo vas a leer mucho)
+
+> Antes de empezar — en este documento aparecen mucho las siglas **CP** y **AP**. Es el **Teorema CAP** (Eric Brewer, 2000), que se aplica a sistemas distribuidos:
+>
+> - **C** (Consistency) → todos los nodos ven el mismo dato al mismo tiempo.
+> - **A** (Availability) → el sistema siempre responde, aunque sea con dato viejo.
+> - **P** (Partition Tolerance) → el sistema sigue funcionando aunque se corte la comunicación entre nodos.
+>
+> **La regla**: bajo partición de red, no podés tener C y A simultáneamente. Tenés que elegir.
+>
+> - **CP** = prioriza Consistency (Mongo con `w:majority`, Neo4j). Bajo partición → rechaza escrituras antes de devolver datos inconsistentes.
+> - **AP** = prioriza Availability (Cassandra). Bajo partición → sigue aceptando escrituras, los datos convergen después.
+>
+> 👉 Para detalles completos, ver `06_CAP_Performance.md`.
+
+---
+
 ## 1. Resumen ejecutivo (lo que decís primero)
 
 > "Nuestro sistema es una **plataforma de streaming musical** que usa **3 motores NoSQL** en una arquitectura de **persistencia poliglota**. Cada motor cubre un caso de uso que los otros dos no podrían resolver eficientemente:

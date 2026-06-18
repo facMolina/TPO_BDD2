@@ -49,6 +49,7 @@
 - **ACID completo**: A (todo o nada), C (constraints al COMMIT), I (MVCC), D (WAL).
 - **Clustering Enterprise**: protocolo **Raft** (N = 2F+1 para tolerar F fallas). Core Servers para escritura, Read Replicas para lectura escala.
 - **CAP**: **CP** — frente a partición, los Core sin quorum rechazan escrituras.
+  - 💡 **CP** = **C**onsistency + **P**artition tolerance. Igual que MongoDB: prioriza datos consistentes sobre disponibilidad. En cluster Enterprise usa **Raft** (algoritmo de consenso). Si un grupo de nodos queda aislado y no tiene mayoría, **deja de aceptar escrituras** hasta que se restaure la red.
 - **AuraDB Free** (la que usamos): sin APOC, sin GDS, sin clustering — Cypher puro.
 
 ---
@@ -140,6 +141,99 @@ Si hacés `MERGE (a)-[:AMIGA_DE]->(b)` sin merger primero los nodos, puede crear
 ---
 
 ## PARTE 3 — Queries prácticas
+
+### 🔍 Cómo acceder a la consola web de Neo4j AuraDB
+
+Para practicar Cypher en la instancia real del TP **sin instalar nada**:
+
+1. Andá a **[console.neo4j.io](https://console.neo4j.io)** e iniciá sesión con la cuenta del grupo (`molina.roman@gmail.com`).
+2. Verificá que la instancia esté en estado **RUNNING** (verde). Si dice "Paused" → click en `Resume` y esperá ~2 minutos.
+3. Click en **`Open`** sobre la instancia → se abre **Neo4j Workspace** en una nueva pestaña.
+4. En el Workspace tenés 3 tabs:
+
+| Tab | Para qué |
+|---|---|
+| **Query** | Donde escribís y ejecutás Cypher (ASCII art con resultados gráficos) |
+| **Explore** | Visualización del grafo en modo navegación |
+| **Import** | Para cargar CSVs |
+
+> 💡 **Atajo en el tab Query**: `Ctrl+Enter` ejecuta la query.
+
+> 🌐 **URL directa al Workspace**: [workspace-preview.neo4j.io](https://workspace-preview.neo4j.io)
+
+> ⚠️ **AuraDB Free se pausa tras ~3 días de inactividad**. Antes de la defensa, asegurate de reactivarla.
+
+---
+
+### 📝 Anatomía de una query en Cypher
+
+Cypher es **declarativo** y usa "ASCII art" — los patrones del grafo se escriben **como se dibujan**.
+
+#### A) Las palabras clave que siempre vas a usar
+
+| Cláusula | Para qué | Análogo SQL |
+|---|---|---|
+| `MATCH` | Buscar un patrón en el grafo | `SELECT ... FROM ... WHERE` |
+| `WHERE` | Filtrar (después de MATCH) | `WHERE` |
+| `RETURN` | Qué devolver | `SELECT` |
+| `CREATE` | Crear nodos/relaciones | `INSERT` |
+| `MERGE` | Crear si no existe, sino devolver | `UPSERT` |
+| `SET` | Asignar propiedad o label | `UPDATE` |
+| `DELETE` / `DETACH DELETE` | Eliminar | `DELETE` |
+| `WITH` | Encadenar resultados de una etapa a la siguiente | (no hay análogo directo) |
+| `ORDER BY`, `LIMIT`, `SKIP` | Ordenar y paginar | igual que SQL |
+
+#### B) Sintaxis ASCII art — esto es lo más importante
+
+```cypher
+(nodo:Label {prop:'valor'})
+```
+- `( )` → nodo
+- `:Label` → label (categoría del nodo). Múltiples labels: `(n:Person:Employee)`
+- `{ }` → propiedades dentro del nodo
+
+```cypher
+(a)-[:TIPO_REL]->(b)
+```
+- `-[ ]->` → relación **dirigida** de `a` hacia `b`
+- `:TIPO_REL` → tipo de relación (siempre mayúsculas por convención)
+
+#### C) Variantes de relación que tenés que reconocer
+
+```cypher
+(a)-[:CONOCE]->(b)             // dirigida: a → b
+(a)<-[:CONOCE]-(b)             // dirigida: b → a
+(a)-[:CONOCE]-(b)              // cualquier dirección
+(a)-[r:CONOCE {desde:2020}]->(b)  // capturo la rel en variable r con propiedades
+(a)-[:CONOCE*2]->(b)           // exactamente 2 saltos
+(a)-[:CONOCE*1..3]->(b)        // entre 1 y 3 saltos
+(a)-[:CONOCE*]->(b)            // ilimitado (cuidado: puede explotar)
+```
+
+#### D) Anatomía visual
+
+```cypher
+MATCH (u:User {name:'Ana'})-[:PLAYED]->(s:Song)<-[:PERFORMED]-(a:Artist)
+WHERE s.duration_ms > 180000
+RETURN a.stage_name AS artista, count(s) AS canciones
+ORDER BY canciones DESC
+LIMIT 10
+```
+
+Leelo así:
+1. **MATCH** el patrón: User llamado Ana → escuchó (`PLAYED`) → una Song ← que tocó (`PERFORMED`) → un Artist.
+2. **WHERE** filtrá las que duran más de 3 minutos.
+3. **RETURN** el nombre del artista y cuántas canciones.
+4. **ORDER BY ... LIMIT** ordená descendente y traé top 10.
+
+#### E) Reglas para escribir Cypher
+
+1. **Case-sensitive**: `:Person` ≠ `:person`. Convención: **PascalCase** para labels, **MAYÚSCULAS_CON_GUION** para tipos de relación, **camelCase** para propiedades.
+2. **Crear relación SIEMPRE necesita primero MATCH de los nodos**. Si hacés `CREATE (a:Person {name:'Ana'})-[:CONOCE]->(b:Person {name:'Luis'})` cuando Ana ya existe, **crea un nuevo nodo Ana duplicado**.
+3. **DELETE sin DETACH falla** si el nodo tiene relaciones. Usá `DETACH DELETE` para borrar nodo + relaciones de una.
+4. Usá **`MERGE` en lugar de `CREATE`** cuando querés "crear si no existe".
+
+---
 
 ### 3.1 Queries del TP (Req 7)
 

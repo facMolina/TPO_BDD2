@@ -29,6 +29,7 @@
 - **Sharding**: distribución horizontal con shard key. Componentes: `mongos` (router) + `config servers` + shards.
 - **Transacciones ACID multi-documento**: desde v4.0 (replica set) y v4.2 (sharded).
 - **CAP**: **CP** por default (con `w:majority` y `readConcern:majority`). Puede comportarse como AP con `w:1`.
+  - 💡 **CP** = **C**onsistency + **P**artition tolerance. Bajo partición de red, MongoDB **prefiere rechazar escrituras** antes que devolver datos inconsistentes. El Primary del Replica Set deja de aceptar writes si no puede confirmar a la mayoría.
 - **Límite de documento**: 16 MB. Para archivos más grandes → GridFS.
 
 ### Modelado: Embedding vs Referencing
@@ -134,6 +135,111 @@
 ---
 
 ## PARTE 3 — Queries prácticas
+
+### 🔍 Cómo acceder a la consola web de MongoDB Atlas
+
+Para practicar queries en la base real del TP **sin instalar nada**:
+
+1. Andá a **[cloud.mongodb.com](https://cloud.mongodb.com)** e iniciá sesión.
+2. Entrá al proyecto del grupo → **Clusters** → tu cluster `Cluster0`.
+3. Tres opciones para escribir queries:
+
+| Opción | Cómo | Cuándo conviene |
+|---|---|---|
+| **Embedded MongoDB Shell** | Botón `...` del cluster → "Open MongoDB Shell" | Para queries CQL-style, lo más rápido |
+| **Browse Collections** | Botón `Browse Collections` → seleccionar `plays` (o cualquier) → tab `Aggregations` o `Find` | Visual, con tab de aggregation pipeline guiada |
+| **Atlas Search Playground** | En `Search` → `Create Index` | Para queries de búsqueda full-text |
+
+> 💡 **Alternativa local**: instalar **MongoDB Compass** (cliente de escritorio) y conectar con la `MONGO_URI` del `.env`. Tiene editor visual de pipelines.
+
+> 🖥️ **Desde mongosh local**: si tenés `mongosh` instalado:
+> ```bash
+> mongosh "mongodb+srv://facmolina_db_user:<pass>@cluster0.qam1hkd.mongodb.net/ing-datos-II"
+> ```
+
+---
+
+### 📝 Anatomía de una query en MongoDB
+
+Antes de mirar las queries, entendé **cómo se arman**. MongoDB tiene dos lenguajes superpuestos:
+
+#### A) MQL (MongoDB Query Language) — para CRUD simple
+
+```javascript
+db.<coleccion>.<metodo>( <filtro>, <opciones> )
+```
+
+- `<coleccion>` → la colección sobre la que operás (ej: `productos`, `plays`, `songs`).
+- `<metodo>` → `find`, `insertOne`, `updateOne`, `deleteOne`, etc.
+- `<filtro>` → un **objeto JSON** que describe la condición (ej: `{ precio: { $gt: 100 } }`).
+- `<opciones>` → segundo objeto, ej: proyección, options.
+
+**Ejemplos visuales**:
+
+```javascript
+db.productos.find( { precio: { $gt: 100 } } )
+           //│         └── filtro: precio > 100
+           //└── colección
+```
+
+```javascript
+db.productos.updateOne(
+  { _id: 1 },                     // filtro: el documento a actualizar
+  { $set: { precio: 1100 } }      // operador: qué cambiar
+)
+```
+
+#### B) Aggregation Pipeline — para analítica y transformaciones
+
+```javascript
+db.<coleccion>.aggregate([
+  { $stage1: {...} },
+  { $stage2: {...} },
+  { $stage3: {...} }
+])
+```
+
+Es como una **cinta transportadora**: la salida de una etapa es la entrada de la siguiente.
+
+**Etapas más usadas (memorizá el orden lógico)**:
+
+| Etapa | Para qué |
+|---|---|
+| `$match` | Filtrar documentos (≈ `WHERE` de SQL). **Poner al inicio** para usar índices. |
+| `$lookup` | JOIN con otra colección |
+| `$unwind` | Convertir array en múltiples docs |
+| `$group` | Agrupar y agregar (≈ `GROUP BY` de SQL) |
+| `$sort` | Ordenar |
+| `$limit` / `$skip` | Paginar |
+| `$project` | Elegir qué campos devolver (≈ `SELECT col1, col2`) |
+
+**Ejemplo visual del flujo**:
+
+```
+db.plays.aggregate([
+  { $match:  { user_id: "User_1" } },     // (1) filtra plays de User_1
+  { $group:  { _id: "$song_id",            // (2) agrupa por canción
+               total: { $sum: 1 }} },      //     suma 1 por cada doc
+  { $sort:   { total: -1 } },              // (3) ordena desc
+  { $limit:  10 }                          // (4) top 10
+])
+```
+
+#### C) Operadores que siempre van con `$`
+
+- **Comparación**: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`
+- **Lógicos**: `$and`, `$or`, `$not`
+- **Update**: `$set`, `$inc`, `$push`, `$pull`, `$unset`
+- **Agregación**: `$sum`, `$avg`, `$max`, `$min`, `$count`
+
+#### D) Reglas para escribir queries
+
+1. Todos los **operadores empiezan con `$`** y van **dentro de un objeto JSON**.
+2. Los **campos anidados se acceden con punto**: `"specs.ram"`, `"author.name"`.
+3. **Acceso a elementos de array**: `db.col.find({ tags: "promo" })` → busca docs cuyo array `tags` contenga "promo".
+4. La query se **ejecuta del primer `$match` al último stage** → orden importa.
+
+---
 
 ### 3.1 Queries del dominio del TP
 

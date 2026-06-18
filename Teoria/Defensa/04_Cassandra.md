@@ -57,6 +57,7 @@
 - **Read Path**: MemTable → Row Cache → Bloom Filter → SSTable.
 - **Sin JOINs**, sin queries ad-hoc → **query-first design**.
 - **CAP**: **AP** — prioriza Availability y Partition Tolerance, consistencia eventual (configurable).
+  - 💡 **AP** = **A**vailability + **P**artition tolerance. Lo opuesto a CP de Mongo/Neo4j. Bajo partición de red, Cassandra **sigue aceptando lecturas y escrituras** en cada lado de la partición — los datos pueden divergir temporalmente y **convergen después** cuando la red se restaura (eventual consistency). Se puede "subir" la consistencia por operación con `CL=QUORUM` (fórmula `W+R>N`).
 
 ### Tablas del TP
 
@@ -172,6 +173,132 @@
 ---
 
 ## PARTE 3 — Queries prácticas (CQL)
+
+### 🔍 Cómo acceder a la consola web de DataStax Astra (Cassandra)
+
+Para practicar CQL en la base real del TP **sin instalar nada**:
+
+1. Andá a **[astra.datastax.com](https://astra.datastax.com)** e iniciá sesión con la cuenta del grupo.
+2. En el panel izquierdo → **Databases** → seleccioná la database `streaming`.
+3. Tab **`CQL Console`** (segunda solapa, arriba) → se abre una terminal `cqlsh` en el navegador.
+4. Cuando carga, ejecutá primero:
+   ```cql
+   USE streaming;
+   ```
+   Para trabajar dentro del keyspace correcto.
+5. Ya podés ejecutar cualquier query (CREATE, INSERT, SELECT, etc.).
+
+> 💡 **Atajo**: `DESC TABLES;` te lista todas las tablas del keyspace activo.
+>
+> 💡 **Si tarda en cargar**: la primera vez, Astra "calienta" la database — esperá 30-60 segundos.
+
+> 🌐 **Si te pide elegir un keyspace al abrir la consola**: elegí `streaming`.
+
+> 🖥️ **Alternativa local con cqlsh**: si querés practicar offline necesitás el secure-connect-bundle y el script:
+> ```bash
+> pip install cqlsh-astra
+> cqlsh -b ./secure-connect-streaming.zip -u token -p $CASSANDRA_TOKEN
+> ```
+
+---
+
+### 📝 Anatomía de una query en CQL
+
+CQL (Cassandra Query Language) es **muy parecido a SQL en la sintaxis**, pero con restricciones derivadas del modelo distribuido. Si sabés SQL, ya entendés el 70%.
+
+#### A) Las palabras clave que vas a usar
+
+| Cláusula | Para qué |
+|---|---|
+| `CREATE KEYSPACE` | Crear "base de datos" |
+| `CREATE TABLE` | Crear tabla con `PRIMARY KEY` obligatoria |
+| `INSERT INTO ... VALUES (...)` | Insertar fila |
+| `SELECT ... FROM ... WHERE ...` | Consultar (con restricciones) |
+| `UPDATE ... SET ... WHERE ...` | Actualizar |
+| `DELETE ... FROM ... WHERE ...` | Borrar (crea tombstone) |
+| `USING TTL n` | Expiración automática en `n` segundos |
+| `USE <keyspace>;` | Cambiar de keyspace activo |
+| `DESCRIBE TABLES;` | Listar tablas |
+| `BATCH ... APPLY BATCH` | Atomicidad entre operaciones de una partición |
+
+#### B) Lo que **NO** se puede hacer en CQL
+
+- ❌ **JOINs** — no existen. Si necesitás datos de 2 tablas, leés cada una por separado.
+- ❌ **Subqueries** — no soportadas.
+- ❌ **WHERE libre** — solo se puede filtrar por columnas que estén en el `PRIMARY KEY` (o que tengan índice). Para filtrar libre se necesita `ALLOW FILTERING` (anti-pattern en producción).
+- ❌ **GROUP BY libre** — solo dentro de una partición.
+
+#### C) Anatomía de un CREATE TABLE
+
+```cql
+CREATE TABLE reproducciones_usuario (
+    usuario_id  TEXT,              ← columna
+    timestamp   TIMESTAMP,         ← columna
+    cancion_id  TEXT,              ← columna
+    completada  BOOLEAN,           ← columna
+    PRIMARY KEY ((usuario_id), timestamp)
+              ──┬──── ──┬─────
+                │       └── clustering key (ordena dentro de la partición)
+                └── partition key (decide en qué nodo va la fila)
+) WITH CLUSTERING ORDER BY (timestamp DESC);
+                          ──┬──── ─┬──
+                            │      └── DESC = más reciente primero
+                            └── ordena por timestamp
+```
+
+⭐ **Si el profe te pide explicar una PRIMARY KEY**:
+
+```cql
+PRIMARY KEY ((partition_key_1, partition_key_2), clustering_key_1, clustering_key_2)
+            └─── Partition Key compuesta ────┘  └──── Clustering ────┘
+```
+
+- **Partition Key** = decide en qué nodo del cluster va la fila (hash → token ring).
+- **Clustering Key** = ordena las filas **dentro de la partición**.
+- **Primary Key** = (partition key, clustering key) — identifica la fila unívocamente.
+
+#### D) Cómo se arma un INSERT
+
+```cql
+INSERT INTO <tabla> (col1, col2, col3)
+VALUES (val1, val2, val3)
+[USING TTL <segundos>];
+```
+
+- Los valores van en el **mismo orden** que las columnas.
+- No hay `AUTO_INCREMENT` → si querés un ID único, usá `uuid()` o `now()` (timeuuid).
+- `USING TTL` es opcional, define expiración automática.
+
+#### E) Cómo se arma un SELECT — la regla de oro
+
+```cql
+SELECT col1, col2 FROM tabla
+WHERE <partition_key> = ?                    ← OBLIGATORIO casi siempre
+  AND <clustering_key> >= ? AND <clustering_key> <= ?   ← rango opcional
+[LIMIT N];
+```
+
+**Regla**: el `WHERE` **siempre** debe incluir la partition key con `=`. Sin partition key → tendrías que hacer un scan global (que Cassandra rechaza salvo con `ALLOW FILTERING`).
+
+#### F) UPDATE COUNTER — sintaxis especial
+
+```cql
+UPDATE tabla_counter
+SET contador = contador + 1
+WHERE partition_key = ? AND clustering_key = ?;
+```
+
+⚠️ No se usa `INSERT` para columnas COUNTER. Solo `UPDATE col = col + N`.
+
+#### G) Reglas para escribir CQL
+
+1. **`WHERE` solo por partition key + clustering key**. Si necesitás filtrar por otra columna, modelá una tabla nueva con esa PK.
+2. **Sin JOINs**: leés cada tabla por separado y combinás en la app.
+3. **Sin ORDER BY libre**: el orden está predeterminado por la clustering key. Solo podés invertirlo (ASC/DESC).
+4. **Cada DELETE crea un tombstone**: si tenés que borrar mucho, mejor usar `TTL`.
+5. **Counter columns** son un tipo especial: tabla dedicada, solo `UPDATE`, nunca `INSERT`.
+
+---
 
 ### 3.1 El ejemplo que le dieron a tu compañero (memorizalo)
 
