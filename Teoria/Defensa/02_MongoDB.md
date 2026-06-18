@@ -136,49 +136,40 @@
 
 ## PARTE 3 — Queries prácticas
 
-### 🔍 Cómo acceder a la consola de MongoDB para probar las queries
+### 🔍 Cómo probar las queries en MongoDB Atlas
 
-⚠️ **OJO**: MongoDB Atlas tiene varias "ventanas con código" y solo **algunas** sirven para probar las queries de este archivo tal como están. Esta es la diferencia:
+⚠️ **Aclaración importante**: MongoDB Atlas Free Tier (M0) **NO tiene un shell `mongosh` embebido en el navegador**, a diferencia de Neo4j Workspace o Astra CQL Console. Esa opción se removió en versiones recientes de Atlas para planes gratuitos. **La opción más cercana a un "shell web" es el editor de Aggregations**.
 
-| Lugar en Atlas | ¿Sirve para las queries de este archivo? | Por qué |
+| Lugar en Atlas | ¿Sirve? | Notas |
 |---|---|---|
-| **Embedded MongoDB Shell** (mongosh) | ✅ **SÍ — usá esta** | Acepta `db.col.aggregate([...])` + JavaScript (`new Date()`, etc.) |
-| **Browse Collections → Aggregation tab** | ✅ Sí, **adaptando**: pegás SOLO el array `[...]`, no `db.col.aggregate(...)` | Editor de pipeline guiado, pero el wrapper lo agrega Atlas solo |
-| **MongoDB Charts** (Add Chart) | ❌ **NO** — esto es para gráficos, no consola | Parser propio, NO acepta JavaScript ni `db.col.aggregate(...)` |
-| **Atlas Search Playground** | ❌ NO — es para índices full-text | Otra cosa |
+| **Browse Collections → tab `Aggregations`** | ✅ Sí — **es lo que vas a usar** | Pegás SOLO el array `[...]`, no acepta `new Date(...)` (hay que poner fechas literales) |
+| **Browse Collections → tab `Find`** | ✅ Para queries simples | Solo equivale a un `find({...})`, sin pipeline |
+| **MongoDB Charts** | ❌ NO — solo para gráficos | No es consola |
+| **Atlas SQL Interface** | ❌ NO — para consultas SQL desde BI | Otra cosa |
 
-#### Cómo abrir la Embedded MongoDB Shell (lo más rápido)
+#### Cómo usar el editor de Aggregations (el "shell web" de MongoDB)
 
 1. Entrá a **[cloud.mongodb.com](https://cloud.mongodb.com)**.
-2. **Project** del grupo → **Database** (panel izquierdo) → ahí ves tu cluster `Cluster0`.
-3. Click en el botón **`Connect`** (al lado de `Browse Collections`).
-4. Aparece un modal con opciones de conexión → elegí **`MongoDB Shell`**.
-5. En la sección "Launch the MongoDB Shell" → click en **`Open MongoDB Shell`** (botón celeste).
-6. Se abre una terminal `mongosh` en el navegador, conectada a tu cluster.
-7. Cambiá a la DB del TP:
-   ```javascript
-   use ing-datos-II
-   ```
-8. Ya podés pegar cualquiera de las queries de este archivo tal cual.
+2. **Project** del grupo → **Database** (panel izquierdo) → click en `Cluster0`.
+3. Botón **`Browse Collections`**.
+4. Panel izquierdo: elegí la DB `ing-datos-II` y la colección que necesites (`plays`, `songs`, `artists`, etc.).
+5. Arriba a la derecha: tab **`Aggregations`** (al lado de `Documents` y `Schema`).
+6. Ahí podés:
+   - Armar el pipeline **etapa por etapa** con el botón **`Add Stage`** y elegir el operador (`$match`, `$group`, etc.) — Atlas te ayuda con autocompletado.
+   - O click en **`Text View`** (ícono `</>`) y **pegar todo el array de una**.
 
-#### Si no encontrás el botón "Open MongoDB Shell"
+#### Reglas para pegar las queries del archivo en el editor Aggregations
 
-A veces Atlas esconde la opción según el plan. Alternativas:
+**Las queries de este archivo están escritas para `mongosh`** (`db.plays.aggregate([...])`). Para usarlas en el editor de Atlas hay que hacer **2 ajustes**:
 
-- **MongoDB Compass** (cliente de escritorio gratis): bajalo de [mongodb.com/products/compass](https://www.mongodb.com/products/compass). Conectás con la `MONGO_URI` del `.env`. Tiene un tab **MONGOSH** integrado en la parte inferior.
-- **mongosh local** (si tenés Node.js instalado):
-  ```bash
-  npm install -g mongosh
-  mongosh "mongodb+srv://facmolina_db_user:<pass>@cluster0.qam1hkd.mongodb.net/ing-datos-II"
-  ```
+**Ajuste 1 — Quitá el wrapper `db.col.aggregate(...)`** y pegá solo el array:
 
-#### Si usás Browse Collections > Aggregation tab
-
-Si vas por **Browse Collections → seleccionás la colección `plays` → tab `Aggregations`**, Atlas te muestra un editor de pipeline. **No pegues `db.plays.aggregate([...])`**, solo el contenido del array. Ejemplo:
-
-❌ NO funciona ahí:
+❌ NO funciona en el editor:
 ```javascript
-db.plays.aggregate([{ $match: {...} }, { $group: {...} }])
+db.plays.aggregate([
+  { $match: {...} },
+  { $group: {...} }
+])
 ```
 
 ✅ Sí funciona:
@@ -189,9 +180,32 @@ db.plays.aggregate([{ $match: {...} }, { $group: {...} }])
 ]
 ```
 
-O directamente etapa por etapa usando el botón **`Add Stage`** del editor.
+**Ajuste 2 — Reemplazá expresiones JavaScript de fechas por fechas literales** con `ISODate("...")`:
 
-> ⚠️ **MongoDB Charts NO sirve para probar queries**. Es solo para crear gráficos a partir de pipelines pre-armados. Si te aparece "Add Chart", "X Axis", "Y Axis" → estás en Charts. Cerrá y volvé a la lista de clusters.
+❌ NO funciona (es JavaScript dinámico):
+```javascript
+{ $match: { timestamp: { $gte: new Date(Date.now() - 24*60*60*1000) } } }
+```
+
+✅ Sí funciona (fecha hardcodeada):
+```javascript
+{ $match: { timestamp: { $gte: ISODate("2026-06-16T00:00:00Z") } } }
+```
+
+> 💡 **Truco rápido**: si querés "últimas 24h" hardcodeado, calculá la fecha de ayer a la misma hora y poné el ISODate. Para el día de la defensa: usá una fecha conocida con datos (ej: el día que cargaste eventos en Cassandra para no quedarte con queries vacías).
+
+#### Si querés un shell `mongosh` real
+
+Como en Atlas Free no está disponible en web, las opciones son:
+
+- **MongoDB Compass** (cliente de escritorio, gratis): bajalo de [mongodb.com/products/compass](https://www.mongodb.com/products/compass) → conectás con la `MONGO_URI` del `.env`. Tiene un tab **`MONGOSH`** integrado en la parte inferior donde **sí podés pegar las queries tal cual** del archivo.
+- **`mongosh` local** (si tenés Node.js):
+  ```bash
+  npm install -g mongosh
+  mongosh "mongodb+srv://facmolina_db_user:<pass>@cluster0.qam1hkd.mongodb.net/ing-datos-II"
+  ```
+
+> ⭐ **Recomendación para la defensa**: instalá Compass. Tiene el editor visual de Aggregations **y** el shell `mongosh` integrado abajo. Es lo mejor de los dos mundos. Si en la defensa te piden ejecutar una query, abrís Compass y tirás `db.songs.find({artist_name: "The Weeknd"})` desde el shell.
 
 ---
 
@@ -279,14 +293,10 @@ db.plays.aggregate([
 
 ### 3.1 Queries del dominio del TP
 
-> 🖥️ **Dónde ejecutarlas**: las queries de esta sección están escritas para **mongosh** (Embedded MongoDB Shell o Compass MONGOSH tab).
+> 🖥️ **Dónde ejecutarlas**: estas queries están en **formato `mongosh`** (con `db.col.aggregate(...)`).
 >
-> Antes de ejecutar, asegurate de estar en la DB correcta:
-> ```javascript
-> use ing-datos-II
-> ```
->
-> Si las querés ejecutar en el editor de **Aggregations de Atlas** (Browse Collections → tab Aggregations), pegá **solo el array `[...]`** (sin `db.plays.aggregate(...)` ni el `)` final).
+> - En **Compass `MONGOSH` tab** o **mongosh local** → pegá tal cual, antes ejecutá `use ing-datos-II`.
+> - En **Atlas Aggregations tab** → pegá solo el array `[...]` (sin el wrapper) y reemplazá `new Date(Date.now() - N)` por `ISODate("YYYY-MM-DDTHH:MM:SSZ")` hardcodeado.
 
 📝 **Top 10 canciones más reproducidas en las últimas 24h** (Req 4a):
 
@@ -336,6 +346,61 @@ db.plays.aggregate([
   { $sort: { total: -1 } }
 ])
 ```
+
+### 3.1bis Versión "Atlas Aggregations tab" — copy/paste directo
+
+Las mismas queries de arriba, pero adaptadas para pegar directo en **Browse Collections → tab Aggregations → Text View**. Solo el array, sin `db.col.aggregate(...)`, con fechas literales.
+
+📝 **Top 10 canciones últimas 24h — Atlas Aggregations tab** (colección: `plays`):
+
+```javascript
+[
+  { $match: { timestamp: { $gte: ISODate("2026-06-16T00:00:00Z") } } },
+  { $group: { _id: "$song_id", reproducciones: { $sum: 1 } } },
+  { $sort: { reproducciones: -1 } },
+  { $limit: 10 },
+  { $lookup: { from: "songs", localField: "_id", foreignField: "song_id", as: "song" } },
+  { $unwind: "$song" },
+  { $project: { _id: 0, cancion: "$song.title", artista: "$song.artist_name", reproducciones: 1 } }
+]
+```
+
+📝 **Historial semanal por artista Y género — Atlas Aggregations tab** (colección: `plays`):
+
+```javascript
+[
+  { $match: { user_id: "User_1", timestamp: { $gte: ISODate("2026-06-10T00:00:00Z") } } },
+  { $lookup: { from: "songs", localField: "song_id", foreignField: "song_id", as: "song" } },
+  { $unwind: "$song" },
+  { $group: {
+      _id: {
+        artista: "$song.artist_name",
+        genero: { $arrayElemAt: ["$song.genres", 0] }
+      },
+      reproducciones: { $sum: 1 }
+  }},
+  { $sort: { reproducciones: -1 } }
+]
+```
+
+📝 **Canciones con alta repro y baja completitud — Atlas Aggregations tab** (colección: `plays`):
+
+```javascript
+[
+  { $group: {
+      _id: "$song_id",
+      total: { $sum: 1 },
+      completadas: { $sum: { $cond: ["$completed", 1, 0] } }
+  }},
+  { $addFields: { completitud: { $divide: ["$completadas", "$total"] } } },
+  { $match: { total: { $gte: 100 }, completitud: { $lt: 0.5 } } },
+  { $sort: { total: -1 } }
+]
+```
+
+> 💡 Para usar las fechas: ajustá el `ISODate("...")` al rango que tengas datos. Si las cargaste con `init_mongodb.js`, los timestamps son de los últimos 30 días → usá una fecha de hace 7 o 30 días.
+
+---
 
 ### 3.2 Queries "tipo profe" — casos genéricos
 
