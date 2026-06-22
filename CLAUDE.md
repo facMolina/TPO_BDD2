@@ -15,7 +15,8 @@ Requerimientos cubiertos: Req 3 (Cassandra), Req 4 (MongoDB), Req 6-9 (Neo4j), O
 ```bash
 npm install              # instalar dependencias (primera vez)
 node init_neo4j.js       # cargar grafo Neo4j (idempotente)
-node init_mongodb.js     # cargar catálogo MongoDB (idempotente)
+node init_mongodb.js     # cargar catálogo MongoDB vía driver Node.js (idempotente)
+mongosh < init_spotify_db.js  # alternativa: cargar el mismo catálogo vía mongosh
 node init_cassandra.js   # cargar Cassandra — 6 tablas + 5000 eventos (idempotente)
 node app/index.js        # menú interactivo poliglota
 node queries_mongodb.js  # ejecutar 5 queries MongoDB del Req 4
@@ -82,7 +83,9 @@ Como AuraDB Free no tiene APOC ni GDS, todas las queries usan **Cypher puro**: `
 | Motor   | MongoDB Atlas Free — AWS São Paulo |
 | Cluster | `cluster0.qam1hkd.mongodb.net` (nota: es el número `1`, no la letra `l`) |
 | DB      | `ing-datos-II` |
-| Driver  | `mongodb` v6 (Node.js, CommonJS) |
+| Driver  | `mongodb` v7 (Node.js, CommonJS) |
+
+Dos cargadores equivalentes: `init_mongodb.js` (driver Node.js, usado por la app) e `init_spotify_db.js` (script `mongosh`). Ambos hacen `drop` + recarga del catálogo maestro.
 
 ## Infraestructura Cassandra
 
@@ -101,7 +104,8 @@ Tablas: `reproducciones_usuario`, `reproducciones_cancion`, `metricas_horarias`,
 | Archivo                              | Descripción                                                        |
 |--------------------------------------|--------------------------------------------------------------------|
 | `init_neo4j.js`                      | Carga del grafo completo (idempotente)                             |
-| `init_mongodb.js`                    | Carga del catálogo MongoDB (idempotente)                           |
+| `init_mongodb.js`                    | Carga del catálogo MongoDB vía driver Node.js (idempotente)        |
+| `init_spotify_db.js`                 | Carga del catálogo MongoDB vía `mongosh` (equivalente, drop+recarga)|
 | `init_cassandra.js`                  | Carga Cassandra: 6 tablas + ~5000 eventos (idempotente)            |
 | `queries_neo4j.md`                   | 5 queries Req 7 con notas, pares de prueba y resultados esperados  |
 | `queries_neo4j.cypher`               | Mismo contenido en formato raw                                     |
@@ -117,7 +121,7 @@ Tablas: `reproducciones_usuario`, `reproducciones_cancion`, `metricas_horarias`,
 | `app/ops/op3_artist_page.js`         | OP-3: Perfil artista (MongoDB + Neo4j)                             |
 | `app/ops/op4_chart.js`               | OP-4: Chart diario (Cassandra chart_counters → MongoDB)            |
 | `app/ops/op5_report.js`              | OP-5: Reporte mensual artista (3 motores)                          |
-| `PRPs/templates/prp_base.md`         | Template base para Product Requirements Prompts                    |
+| `Teoria/`                            | Apuntes de clase (`IDII_ClaseNN.md`) y material de defensa         |
 
 ## Rol: DBA Senior NoSQL
 
