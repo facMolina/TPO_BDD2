@@ -110,6 +110,8 @@ Tablas: `reproducciones_usuario`, `reproducciones_cancion`, `metricas_horarias`,
 | `queries_neo4j.md`                   | 5 queries Req 7 con notas, pares de prueba y resultados esperados  |
 | `queries_neo4j.cypher`               | Mismo contenido en formato raw                                     |
 | `queries_mongodb.js`                 | 5 queries Req 4 corregidas (4b agrupa por artista Y género)        |
+
+> **Gotcha Query 4c**: devuelve **vacío** con el dataset actual. `init_mongodb.js` genera `completed: Math.random() > 0.3` (probabilidad uniforme ~70% para todas las canciones), así que ninguna canción con >50 plays baja del 40% de completitud. El resultado vacío es correcto, no es un bug. Para demostrar filas, relajar el umbral del `$match` a `tasa_completitud < 0.65`.
 | `queries_cassandra.cql`              | 11 queries CQL Req 3.1–3.3                                         |
 | `app/index.js`                       | Menú interactivo — capa poliglota                                  |
 | `app/config.js`                      | Conexiones a los 3 motores desde .env                              |
